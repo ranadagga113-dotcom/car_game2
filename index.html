@@ -1,0 +1,189 @@
+import random
+import sys
+import pygame
+
+# 1. التهيئة وإعداد الشاشة
+pygame.init()
+WIDTH, HEIGHT = 600, 700
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("سباق المسارات الثلاثة")
+clock = pygame.time.Clock()
+
+# 2. الألوان
+ASPHALT = (40, 40, 45)
+WHITE = (255, 255, 255)
+GREEN = (46, 204, 113)
+RED = (231, 76, 60)
+YELLOW = (241, 196, 15)
+BLUE = (52, 152, 219)
+
+# 3. إعدادات المسارات والسيارة
+LANES = [130, 300, 470]  # إحداثيات X للمسارات الثلاثة
+current_lane = 1  # البداية من المسار الأوسط
+
+player_w, player_h = 50, 85
+player_y = HEIGHT - 120
+
+# 4. الأعداء والجوائز
+enemy_w, enemy_h = 50, 85
+enemy_lane = random.randint(0, 2)
+enemy_y = -100
+enemy_speed = 7
+
+coin_size = 25
+coin_lane = random.randint(0, 2)
+coin_y = -300
+
+score = 0
+coins_collected = 0
+game_over = False
+
+# خطوط الطريق المتحركة
+line_offset = 0
+
+
+# دالة رسم الطريق والمسارات
+def draw_track():
+    global line_offset
+    screen.fill(ASPHALT)
+
+    # رسم حواف الطريق
+    pygame.draw.rect(screen, GREEN, (0, 0, 50, HEIGHT))
+    pygame.draw.rect(screen, GREEN, (WIDTH - 50, 0, 50, HEIGHT))
+
+    # حركة خطوط المسارات
+    line_offset = (line_offset + enemy_speed) % 60
+    for y in range(-60, HEIGHT, 60):
+        # خط فاصل أول
+        pygame.draw.rect(screen, WHITE, (215, y + line_offset, 10, 35))
+        # خط فاصل ثانٍ
+        pygame.draw.rect(screen, WHITE, (375, y + line_offset, 10, 35))
+
+
+# الحلقة الرئيسية
+running = True
+while running:
+    clock.tick(60)
+
+    # 1. الاستجابة للأحداث (الضغط على الأزرار)
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+
+        if event.type == pygame.KEYDOWN:
+            if not game_over:
+                # التنقل بين المسارات بضغطة واحدة
+                if (
+                    event.key == pygame.K_LEFT or event.key == pygame.K_a
+                ) and current_lane > 0:
+                    current_lane -= 1
+                elif (
+                    event.key == pygame.K_RIGHT or event.key == pygame.K_d
+                ) and current_lane < 2:
+                    current_lane += 1
+            else:
+                # إعادة اللعب أو الخروج
+                if event.key == pygame.K_r:
+                    game_over = False
+                    score = 0
+                    coins_collected = 0
+                    enemy_speed = 7
+                    enemy_y = -100
+                    coin_y = -300
+                    current_lane = 1
+                elif event.key == pygame.K_q:
+                    running = False
+
+    if not game_over:
+        # 2. تحديث حركة الأعداء والعملات
+        enemy_y += enemy_speed
+        coin_y += enemy_speed
+
+        # إعادة تدوير السيارة المنافسة
+        if enemy_y > HEIGHT:
+            enemy_y = -100
+            enemy_lane = random.randint(0, 2)
+            score += 10
+            # زيادة السرعة كل 50 نقطة
+            if score % 50 == 0 and enemy_speed < 18:
+                enemy_speed += 1.5
+
+        # إعادة تدوير العملة الذهبية
+        if coin_y > HEIGHT:
+            coin_y = -300
+            coin_lane = random.randint(0, 2)
+
+        # 3. تحديد أبعاد العناصر لفحص التصادم
+        player_x = LANES[current_lane] - player_w // 2
+        player_rect = pygame.Rect(player_x, player_y, player_w, player_h)
+
+        enemy_x = LANES[enemy_lane] - enemy_w // 2
+        enemy_rect = pygame.Rect(enemy_x, enemy_y, enemy_w, enemy_h)
+
+        coin_x = LANES[coin_lane] - coin_size // 2
+        coin_rect = pygame.Rect(coin_x, coin_y, coin_size, coin_size)
+
+        # فحص الاصطدام بالسيارة الأخرى (خسارة)
+        if player_rect.colliderect(enemy_rect):
+            game_over = True
+
+        # فحص جمع العملة (نقاط إضافية)
+        if player_rect.colliderect(coin_rect):
+            coins_collected += 1
+            score += 25
+            coin_y = -300
+            coin_lane = random.randint(0, 2)
+
+        # 4. الرسم على الشاشة
+        draw_track()
+
+        # رسم سيارة اللاعب (زرقاء)
+        pygame.draw.rect(
+            screen,
+            BLUE,
+            (player_x, player_y, player_w, player_h),
+            border_radius=8,
+        )
+
+        # رسم سيارة المنافس (حمراء)
+        pygame.draw.rect(
+            screen,
+            RED,
+            (enemy_x, enemy_y, enemy_w, enemy_h),
+            border_radius=8,
+        )
+
+        # رسم النجمة/العملة (صفراء)
+        pygame.draw.circle(
+            screen,
+            YELLOW,
+            (LANES[coin_lane], coin_y + coin_size // 2),
+            coin_size // 2,
+        )
+
+        # عرض النتيجة والعملات
+        font = pygame.font.SysFont("arial", 22, bold=True)
+        score_text = font.render(f"Score: {score}", True, WHITE)
+        coins_text = font.render(f"Coins: {coins_collected}", True, YELLOW)
+        screen.blit(score_text, (60, 20))
+        screen.blit(coins_text, (60, 50))
+
+    else:
+        # شاشة انتهاء اللعبة
+        font_lg = pygame.font.SysFont("arial", 45, bold=True)
+        font_sm = pygame.font.SysFont("arial", 22)
+
+        over_txt = font_lg.render("CRASHED!", True, RED)
+        final_score_txt = font_sm.render(f"Final Score: {score}", True, WHITE)
+        restart_txt = font_sm.render(
+            "Press R to Restart or Q to Quit", True, YELLOW
+        )
+
+        screen.blit(over_txt, (WIDTH // 2 - 100, HEIGHT // 2 - 60))
+        screen.blit(final_score_txt, (WIDTH // 2 - 75, HEIGHT // 2))
+        screen.blit(restart_txt, (WIDTH // 2 - 145, HEIGHT // 2 + 50))
+
+    pygame.display.flip()
+
+pygame.quit()
+sys.exit()
